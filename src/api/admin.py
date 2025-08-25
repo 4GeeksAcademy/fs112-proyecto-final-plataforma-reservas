@@ -9,8 +9,8 @@ def setup_admin(app):
     admin = Admin(app, name='WEPLACEIT Admin', template_mode='bootstrap3')
 
     class UserView(ModelView):
-        column_list  = ('id', 'is_active', 'email', 'username', 'first_name', 'last_name', 'created_at', 'password')
-        form_columns = (      'is_active', 'email', 'username', 'first_name', 'last_name',                         )
+        column_list  = ('id', 'is_active', 'email', 'username', 'first_name', 'last_name', 'password', 'created_at')
+        form_columns = (      'is_active', 'email', 'username', 'first_name', 'last_name', 'password'              )
 
 
     class SpaceView(ModelView):
