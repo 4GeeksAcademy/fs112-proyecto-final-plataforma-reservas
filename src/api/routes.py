@@ -213,8 +213,8 @@ def private_route():
 
 
 ############################################
-#######     USER PRIVATE PROFILE     #######
-#######       GET INFORMATION        #######
+#######     User - Perfil Privado    #######
+#######       GET datos usuario      #######
 ############################################
 
 @api.route('/profile', methods=['GET'])
@@ -252,3 +252,192 @@ def get_user_private_profile():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+
+############################################
+#######     User - Perfil Privado    #######
+#######    Modificar datos usuario   #######
+############################################
+"""
+JSON request body para actualizar perfil:
+{
+    "first_name": "nuevo_nombre",      // opcional
+    "last_name":  "nuevo_apellido",    // opcional
+    "username":   "nuevo_username",    // opcional
+    "email":      "nuevo@email.com",   // opcional
+
+    "current_password":  "vieja_contraseña",   // opcional
+    "password":         "nueva_contraseña"   // opcional
+}
+"""
+@api.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_user_private_profile():
+
+
+    # Obtener el ID del usuario autenticado desde el token
+    user_id = get_jwt_identity()
+
+    # Buscar el usuario en la base de datos
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    
+
+    # Obtener los datos del request
+    data = request.get_json()
+
+
+    try:  
+
+        if "first_name" in data:
+            user.first_name = data["first_name"]
+        
+        if "last_name" in data:
+            user.last_name = data["last_name"]
+        
+        if "username" in data:
+            # Verificar que el username no esté en uso
+            existing_user = User.query.filter(User.username == data["username"], User.id != user.id).first()
+            if existing_user:
+                return jsonify({"msg": "Este nombre de usuario ya está en uso."}), 400
+            user.username = data["username"]
+        
+        if "email" in data:
+            # Verificar que el email no esté en uso
+            existing_user = User.query.filter(User.email == data["email"], User.id != user.id).first()
+            if existing_user:
+                return jsonify({"msg": "Este correo electrónico ya está registrado."}), 400
+            user.email = data["email"]
+
+
+        # Manejo de cambio de contraseña
+        if 'password' in data:
+            if 'current_password' not in data:
+                return jsonify({'error': 'Se necesita la contraseña actual para cambiar a nueva contraseña.'}), 400
+            
+            if not check_password_hash(user.password, data['current_password']):
+                return jsonify({'error': 'La contraseña actual es incorrecta.'}), 400
+            
+            user.password = generate_password_hash(data['password'])
+        
+        
+        # Guardar cambios en la BBDD
+        db.session.commit()
+
+
+        return jsonify({
+            'message': 'Profile actualizado exitosamente.',
+            'user': user.serialize()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "Error al actualizar perfil.", 'error': str(e)}), 500
+    
+
+############################################
+#######   GET ALL SPACES (PUBLIC)    #######
+############################################
+"""
+Obtiene la lista de todos los espacios disponibles
+Endpoint público - no requiere autenticación
+"""
+@api.route('/spaces', methods=['GET'])
+def get_all_spaces():
+
+    try:
+        # Obtenemos todos los espacios de la base de datos
+        spaces = Space.query.all()
+
+
+        # Serializar todos los espacios
+        spaces_data = [space.serialize() for space in spaces]
+
+        return jsonify({
+            "msg":    "Espacios obtenidos exitosamente.",
+            "total":  len(spaces_data),
+            "spaces": spaces_data
+        }), 200
+
+    except Exception as e:
+        return jsonify({"message": "Error al obtener espacios.", "error": str(e)}), 500
+    
+
+############################################
+#######   CREATE NEW SPACE           #######
+############################################
+"""
+JSON request body para crear espacio:
+{
+    "title":         "Título del espacio",
+    "address":       "Calle, ciudad...",
+    "description":   "Descripción del espacio",
+    "price_per_day":  50.00,
+    "capacity":       10
+}
+"""
+@api.route('/new-space', methods=['POST'])
+@jwt_required()
+def create_new_space():
+
+    try: 
+        # Obtener el ID del usuario autenticado (propietario del espacio)
+        current_user_id = get_jwt_identity()
+        
+        # Verificar que el usuario existe y está activo
+        user = User.query.get(current_user_id)
+        if not user or not user.is_active:
+            return jsonify({"msg": "Usuario no válido."}), 401
+        
+        # Obtener los datos del request
+        data = request.get_json()
+        
+        # Validar campos obligatorios
+        required_fields = ["title", "address", "description", "price_per_day", "capacity"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"msg": f"El campo '{field}' es obligatorio."}), 400
+    
+
+        try:
+            # Se validad algunos datos
+            price_per_day = Decimal(str(data['price_per_day']))
+            capacity = int(data['capacity'])
+            
+            if price_per_day <= 0:
+                return jsonify({'error': 'El precio por día debe ser un número positivo'}), 400
+            
+            if capacity <= 0:
+                return jsonify({'error': 'La capacidad debe ser un número positivo.'}), 400
+            
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Formato de precio o capacidad inválidos.'}), 400
+    
+
+        # Crear nuevo espacio
+        new_space = Space(
+            owner_id      = current_user_id,
+            title         = data["title"][:60],     # Se asegura de longitud máxima
+            address       = data["address"][:255],  # Se asegura de longitud máxima
+            description   = data["description"],
+            price_per_day = price_per_day,
+            capacity      = capacity
+            # is_active   = True # --> Solo si ee implementa esto en la BBDD
+        )
+        
+        # Guardar en base de datos
+        db.session.add(new_space)
+        db.session.commit()
+        
+        return jsonify({
+            "msg": "Espacio creado exitosamente.",
+            "space": new_space.serialize()
+        }), 201
+    
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": "Error al crear espacio.", "error": str(e)}), 500
