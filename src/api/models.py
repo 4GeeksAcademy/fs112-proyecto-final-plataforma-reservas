@@ -167,9 +167,9 @@ class Booking(db.Model):
 
     ### TABLE CONSTRAINTS ###
     __table_args__ = (
-        CheckConstraint('check_out > check_in', name='check_valid_booking_dates'),
-        CheckConstraint('total_days > 0',       name='check_positive_days'),
-        CheckConstraint('total_price > 0',      name='check_positive_total_price'),
+        CheckConstraint('check_out   > check_in', name='check_valid_booking_dates'),
+        CheckConstraint('total_days  > 0',        name='check_positive_days'),
+        CheckConstraint('total_price > 0',        name='check_positive_total_price'),
 
         # How to prevent double bookings for the same space and dates????
         # UniqueConstraint('space_id', 'check_in', 'check_out', name='unique_booking_dates'),   ### ---> Like this?
