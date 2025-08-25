@@ -213,8 +213,8 @@ def private_route():
 
 
 ############################################
-#######     USER PRIVATE PROFILE     #######
-#######       GET INFORMATION        #######
+#######     User - Perfil Privado    #######
+#######       GET datos usuario      #######
 ############################################
 
 @api.route('/profile', methods=['GET'])
@@ -252,3 +252,87 @@ def get_user_private_profile():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+
+############################################
+#######     User - Perfil Privado    #######
+#######    Modificar datos usuario   #######
+############################################
+"""
+JSON request body para actualizar perfil:
+{
+    "first_name": "nuevo_nombre",      // opcional
+    "last_name":  "nuevo_apellido",    // opcional
+    "username":   "nuevo_username",    // opcional
+    "email":      "nuevo@email.com",   // opcional
+
+    "current_password":  "vieja_contraseña",   // opcional
+    "password":         "nueva_contraseña"   // opcional
+}
+"""
+@api.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_user_private_profile():
+
+
+    # Obtener el ID del usuario autenticado desde el token
+    user_id = get_jwt_identity()
+
+    # Buscar el usuario en la base de datos
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    
+
+    # Obtener los datos del request
+    data = request.get_json()
+
+
+    try:  
+
+        if "first_name" in data:
+            user.first_name = data["first_name"]
+        
+        if "last_name" in data:
+            user.last_name = data["last_name"]
+        
+        if "username" in data:
+            # Verificar que el username no esté en uso
+            existing_user = User.query.filter(User.username == data["username"], User.id != user.id).first()
+            if existing_user:
+                return jsonify({"msg": "Este nombre de usuario ya está en uso."}), 400
+            user.username = data["username"]
+        
+        if "email" in data:
+            # Verificar que el email no esté en uso
+            existing_user = User.query.filter(User.email == data["email"], User.id != user.id).first()
+            if existing_user:
+                return jsonify({"msg": "Este correo electrónico ya está registrado."}), 400
+            user.email = data["email"]
+
+
+        # Manejo de cambio de contraseña
+        if 'password' in data:
+            if 'current_password' not in data:
+                return jsonify({'error': 'Se necesita la contraseña actual para cambiar a nueva contraseña.'}), 400
+            
+            if not check_password_hash(user.password, data['current_password']):
+                return jsonify({'error': 'La contraseña actual es incorrecta.'}), 400
+            
+            user.password = generate_password_hash(data['password'])
+        
+        
+        # Guardar cambios en la BBDD
+        db.session.commit()
+
+
+        return jsonify({
+            'message': 'Profile actualizado exitosamente.',
+            'user': user.serialize()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "Error al actualizar perfil.", 'error': str(e)}), 500
